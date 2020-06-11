@@ -1,0 +1,141 @@
+#!/usr/bin/env node
+const { prompt, Separator, ui } = require('inquirer')
+const chalk = require('chalk')
+const { exec } = require('child_process')
+const ora = require('ora')
+const path = require('path')
+
+const customizeTemplate = 'customizeTemplate'
+const cwfeTempFolder = 'cwfeTempFolder'
+
+// 用户交互内容
+const nameQuestion = {
+  type: 'input',
+  name: 'folder',
+  message: '模板保存目录（不输入将在当前文件夹内生成模板）'
+}
+const templateListQuestion = {
+  type: 'list',
+  name: 'url',
+  message: '请选择一个模板项目',
+  choices: [{
+    name: '手动输入',
+    value: customizeTemplate
+  }, {
+    name: 'react-ts',
+    value: 'https://github.com/CWFE/fe-template.git'
+  }],
+  default: 'https://github.com/CWFE/fe-template.git'
+}
+const templateInputQuestion = {
+  type: 'input',
+  name: 'url',
+  message: '请输入模板git地址',
+  validate: val => {
+    if (!val) return '模板地址不能为空'
+    return true
+  }
+}
+const branchQuestion = {
+  type: 'list',
+  name: 'branch',
+  message: '请选择对应模板分支'
+}
+
+// 从git拉去template项目
+const _makeTemplate = async (folder, url) => {
+  const spinner = ora(chalk.yellow('正在下载所选项目'))
+  spinner.start()
+  return new Promise((resolve, reject) => {
+    let cmdStr = ''
+    cmdStr += `git clone ${url} ${folder} && cd ${folder}`
+
+    exec(cmdStr, async (error, stdout, stderr) => {
+      spinner.stop()
+      if (error) {
+        reject(error)
+      } else {
+        console.log(chalk.greenBright('项目下载成功！'))
+        resolve()
+      }
+    })
+  })
+}
+
+// 获取template项目所有远程分支
+const _readBranches = async (folder) => {
+  const spinner = ora(chalk.yellow('正在获取分支信息'))
+  spinner.start()
+  return new Promise(resolve => {
+    exec(`cd ${folder} && git fetch && git branch -a`, (error, stdout, stderr) => {
+      spinner.stop()
+      resolve(stdout)
+    })
+  })
+}
+
+// 切换对应模板分支
+const _checkoutBranch = async (folder, branches) => {
+  const selectBranchRes = await prompt([{
+    ...branchQuestion,
+    choices: branches
+  }])
+  const selectedBranch = selectBranchRes['branch']
+
+  const spinner = ora(chalk.yellow('正在切换到对应分支'))
+  spinner.start()
+  return new Promise(resolve => {
+    exec(`cd ${folder} && git checkout ${selectedBranch} -b ${selectedBranch} && rm -rf .git`, (error, stdout, stderr) => {
+      spinner.stop()
+      console.log(chalk.greenBright('切换分支成功！'))
+      resolve()
+    })
+  })
+}
+
+// 将临时文件夹内容复制到目标文件夹
+_handleTempFolder = async () => {
+  const spinner = ora(chalk.yellow('正在处理模板'))
+  spinner.start()
+  return new Promise(resolve => {
+    exec(`cp -R ./${cwfeTempFolder}/. ./`, (error, stdout, stderr) => {
+      exec(`rm -rf ${cwfeTempFolder}`, () => {
+        spinner.stop()
+        resolve()
+      })
+    })
+  })
+}
+
+module.exports = async () => {
+  const data = await prompt([nameQuestion, templateListQuestion])
+  // 读取文件夹名，为空则指定临时文件夹名
+  const folder = data['folder'] || cwfeTempFolder
+  const autor = data['author']
+  let url = data['url']
+
+  if (url === customizeTemplate) {
+    const templateData = await prompt([templateInputQuestion])
+    url = templateData['url']
+  }
+  try {
+    await _makeTemplate(folder, url)
+
+    // 获取远程分支
+    const readBranchRes = await _readBranches(folder)
+    // 处理远程分支
+    const originBranches = readBranchRes.split('\n').filter(t => t.indexOf('remotes/origin/') >= 0 && t.indexOf('HEAD') < 0)
+    const branches = originBranches.map(t => t.replace(/\s+/g, ''))
+
+    await _checkoutBranch(folder, branches)
+
+    if (folder === cwfeTempFolder) {
+      await _handleTempFolder()
+    }
+    console.log(chalk.greenBright('模板已成功生成！'))
+  } catch (e) {
+    console.log(chalk.red(e.message))
+    console.log(chalk.yellow('项目生成失败，请检查网络'))
+    process.exit()
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@cwfe/cwfe-cli",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/CWFE/react-cli.git",
+  "author": "喵大快救我 <wang0122xl@163.com>",
+  "license": "MIT",
+  "bin": {
+    "cwfe": "bin/cli"
+  },
+  "dependencies": {
+    "chalk": "^4.1.0",
+    "commander": "^5.1.0",
+    "inquirer": "^7.1.0",
+    "ora": "^4.0.4"
+  }
+}
